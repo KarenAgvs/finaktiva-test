@@ -1,0 +1,82 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-db
+    environment:
+      MYSQL_DATABASE: Registration
+      MYSQL_USER: finaktiva_user
+      MYSQL_PASSWORD: finaktiva_password
+      MYSQL_RANDOM_ROOT_PASSWORD: yes
+    expose:
+      - "3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: always
+    networks:
+      - database-network
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: rabbitmq-broker
+    expose:
+      - "5672"
+    restart: always
+    networks:
+      - rabbitmq-network
+
+  api_service:
+    image: karenagudelo/finaktiva_logs_api
+    container_name: api
+    expose:
+      - "3000"
+    environment:
+      APP_PORT: 3000
+      APP_HOST: 0.0.0.0
+      BROKER_URL: amqp://rabbitmq:5672
+      DATABASE_URL: mysql://finaktiva_user:finaktiva_password@mysql:3306/Registration
+    depends_on:
+      - mysql
+      - rabbitmq
+    restart: always
+    networks:
+      - rabbitmq-network
+      - database-network
+      - client-network
+
+  worker:
+    image: karenagudelo/finaktiva_logs_worker
+    container_name: worker
+    environment:
+      BROKER_URL: amqp://rabbitmq:5672
+      DATABASE_URL: mysql://finaktiva_user:finaktiva_password@mysql:3306/Registration
+    depends_on:
+      - mysql
+      - rabbitmq
+    restart: always
+    networks:
+      - rabbitmq-network
+      - database-network
+
+  frontend:
+    image: karenagudelo/finaktiva_logs_frontend
+    container_name: frontend
+    restart: always
+    depends_on:
+      - api_service
+    environment:
+      - BACKEND_URL=http://api_service:3000/
+    ports:
+      - "8080:80"
+    networks:
+      - client-network
+
+volumes:
+  mysql-data:
+
+networks:
+  rabbitmq-network:
+    driver: bridge
+  database-network:
+    driver: bridge
+  client-network:
+    driver: bridge
